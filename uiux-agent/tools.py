@@ -44,12 +44,28 @@ def list_files(directory: str, extension: Optional[str] = None) -> str:
 
 
 def write_file(file_path: str, content: str) -> str:
-    """Write content to a file (for generating improved components)."""
+    """Write content to a file. Never overwrites existing files - creates new ones with .new suffix."""
     try:
         path = Path(file_path)
+
+        # Never overwrite existing files
+        if path.exists():
+            # Add .new before the extension (e.g., Component.tsx -> Component.new.tsx)
+            stem = path.stem
+            suffix = path.suffix
+            new_path = path.parent / f"{stem}.new{suffix}"
+
+            # If .new also exists, add a number
+            counter = 2
+            while new_path.exists():
+                new_path = path.parent / f"{stem}.new{counter}{suffix}"
+                counter += 1
+
+            path = new_path
+
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
-        return f"Successfully wrote to {file_path}"
+        return f"Successfully wrote to {path}"
     except Exception as e:
         return f"Error writing file: {str(e)}"
 
@@ -142,13 +158,13 @@ TOOLS = [
     },
     {
         "name": "write_file",
-        "description": "Write content to a file. Use this to output improved component code or new files.",
+        "description": "Write content to a file. Use this to output improved component code or new files. IMPORTANT: Existing files are NEVER overwritten - if the file exists, a new file with .new suffix is created instead (e.g., Component.tsx -> Component.new.tsx).",
         "input_schema": {
             "type": "object",
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "Path where the file should be written"
+                    "description": "Path where the file should be written. If file exists, .new suffix will be added automatically."
                 },
                 "content": {
                     "type": "string",

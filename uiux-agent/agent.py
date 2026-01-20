@@ -107,9 +107,8 @@ async def run_agent(
         print(f"{'='*60}\n")
 
     iteration = 0
-    max_iterations = 15  # Safety limit
 
-    while iteration < max_iterations:
+    while True:  # No iteration limit - agent runs until complete
         iteration += 1
 
         if verbose:
@@ -172,8 +171,6 @@ async def run_agent(
             # Unexpected stop reason
             return f"Agent stopped unexpectedly: {response['stop_reason']}"
 
-    return "Agent reached maximum iterations without completing."
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -197,8 +194,8 @@ def main():
     parser.add_argument(
         "--provider",
         choices=["anthropic", "openai", "gemini"],
-        default="anthropic",
-        help="LLM provider to use (default: anthropic)"
+        default="gemini",
+        help="LLM provider to use (default: gemini)"
     )
     parser.add_argument(
         "--model",

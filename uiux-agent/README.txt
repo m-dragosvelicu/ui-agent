@@ -16,8 +16,8 @@ TL;DR
    cd uiux-agent
    pip install -e .
 
-   # Set your API key
-   export ANTHROPIC_API_KEY="your-key"
+   # Set your API key (Gemini is default)
+   export GOOGLE_API_KEY="your-key"
 
    # Use from anywhere
    fixitmany "Make this component not suck" -p ~/projects/my-webapp
@@ -46,9 +46,9 @@ CONFIGURATION
 
 Set your API key(s) as environment variables:
 
-   export ANTHROPIC_API_KEY="your-key"    # For Claude (default)
+   export GOOGLE_API_KEY="your-key"       # For Gemini (default)
+   export ANTHROPIC_API_KEY="your-key"    # For Claude
    export OPENAI_API_KEY="your-key"       # For GPT
-   export GOOGLE_API_KEY="your-key"       # For Gemini
 
 Or create a .env file in the uiux-agent directory:
 
@@ -109,9 +109,9 @@ When you give it a task, the agent autonomously:
 ENVIRONMENT VARIABLES
 ---------------------
 
-ANTHROPIC_API_KEY   - Required for Claude (default provider)
-OPENAI_API_KEY      - Required for GPT models
-GOOGLE_API_KEY      - Required for Gemini models
+GOOGLE_API_KEY      - Required for Gemini (default provider)
+ANTHROPIC_API_KEY   - Required for Claude
+OPENAI_API_KEY      - Required for GPT
 
 
 FILES
@@ -128,10 +128,19 @@ pyproject.toml  - Package config for pip install
 QUICK REFERENCE
 ---------------
 
-   fixitmany "task" -p <path>              Basic usage
-   fixitmany --provider openai "task"      Use GPT instead of Claude
-   fixitmany --provider gemini "task"      Use Gemini
+   fixitmany "task" -p <path>              Basic usage (Gemini default)
+   fixitmany --provider anthropic "task"   Use Claude instead
+   fixitmany --provider openai "task"      Use GPT instead
    fixitmany -q "task" -p <path>           Quiet mode (less output)
    fixitmany --interactive -p <path>       Chat mode
-   fixitmany --model gpt-4-turbo "task"    Custom model
+   fixitmany --model gemini-2.5-pro "task" Custom model
    fixitmany --help                        Show all options
+
+
+SAFETY
+------
+
+The agent NEVER overwrites existing files. If you ask it to write to a file
+that already exists, it creates a new file with .new suffix instead:
+
+   ProductCard.tsx (exists) -> ProductCard.new.tsx (created)

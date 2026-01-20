@@ -118,17 +118,18 @@ doc.add_paragraph("This installs fixitmany as a command you can run from anywher
 
 doc.add_heading('Step 2: Configure API Keys', level=2)
 doc.add_paragraph(
-    "Set your API key as an environment variable. You only need the key for the provider you want to use:"
+    "Set your API key as an environment variable. You only need the key for the provider you want to use. "
+    "Gemini is the default provider:"
 )
 code_env = doc.add_paragraph()
 code_env.style = 'No Spacing'
 run = code_env.add_run(
-    "# For Claude (default)\n"
+    "# For Gemini (default)\n"
+    "export GOOGLE_API_KEY=\"your-key\"\n\n"
+    "# For Claude\n"
     "export ANTHROPIC_API_KEY=\"your-key\"\n\n"
     "# For OpenAI\n"
-    "export OPENAI_API_KEY=\"your-key\"\n\n"
-    "# For Gemini\n"
-    "export GOOGLE_API_KEY=\"your-key\""
+    "export OPENAI_API_KEY=\"your-key\""
 )
 run.font.name = 'Courier New'
 run.font.size = Pt(10)
@@ -145,12 +146,12 @@ doc.add_paragraph("Point it at your project and describe what you need:")
 code2 = doc.add_paragraph()
 code2.style = 'No Spacing'
 run = code2.add_run(
-    "# Basic usage\n"
+    "# Basic usage (Gemini is default)\n"
     "fixitmany \"Improve my landing page\" -p ./my-project\n\n"
+    "# Use Claude instead\n"
+    "fixitmany --provider anthropic \"Fix this bug\" -p ./my-project\n\n"
     "# Use OpenAI instead\n"
-    "fixitmany --provider openai \"Fix this bug\" -p ./my-project\n\n"
-    "# Use Gemini\n"
-    "fixitmany --provider gemini \"Modernize this component\" -p ./my-project\n\n"
+    "fixitmany --provider openai \"Modernize this component\" -p ./my-project\n\n"
     "# Interactive chat mode\n"
     "fixitmany --interactive -p ./my-project"
 )
@@ -291,16 +292,24 @@ doc.add_paragraph("Once installed, use fixitmany from anywhere:")
 ref = doc.add_paragraph()
 ref.style = 'No Spacing'
 run = ref.add_run(
-    "fixitmany \"task\" -p <path>              # Basic usage\n"
-    "fixitmany --provider openai \"task\"      # Use GPT instead of Claude\n"
-    "fixitmany --provider gemini \"task\"      # Use Gemini\n"
+    "fixitmany \"task\" -p <path>              # Basic usage (Gemini default)\n"
+    "fixitmany --provider anthropic \"task\"   # Use Claude instead\n"
+    "fixitmany --provider openai \"task\"      # Use GPT instead\n"
     "fixitmany -q \"task\" -p <path>           # Quiet mode (less output)\n"
     "fixitmany --interactive -p <path>       # Chat mode\n"
-    "fixitmany --model gpt-4-turbo \"task\"    # Custom model\n"
+    "fixitmany --model gemini-2.5-pro \"task\" # Custom model\n"
     "fixitmany --help                        # Show all options"
 )
 run.font.name = 'Courier New'
 run.font.size = Pt(10)
+
+# Safety
+doc.add_heading('Safety', level=1)
+doc.add_paragraph(
+    "The agent NEVER overwrites existing files. If you ask it to write to a file that already exists, "
+    "it creates a new file with a .new suffix instead. For example, if ProductCard.tsx exists, "
+    "the agent will create ProductCard.new.tsx instead of overwriting the original."
+)
 
 # Next Steps
 doc.add_heading('Next Steps', level=1)

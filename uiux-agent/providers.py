@@ -56,7 +56,7 @@ class AnthropicProvider(LLMProvider):
 class OpenAIProvider(LLMProvider):
     """OpenAI GPT provider."""
 
-    def __init__(self, model: str = "gpt-4o"):
+    def __init__(self, model: str = "gpt-4.1"):
         from openai import OpenAI
         self.client = OpenAI()
         self.model = model
@@ -159,95 +159,121 @@ class OpenAIProvider(LLMProvider):
 
 
 class GeminiProvider(LLMProvider):
-    """Google Gemini provider."""
+    """Google Gemini provider using the new google.genai SDK."""
 
-    def __init__(self, model: str = "gemini-2.0-flash"):
-        import google.generativeai as genai
-        genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+    def __init__(self, model: str = "gemini-2.5-pro"):
+        from google import genai
+        self.client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
         self.model_name = model
-        self.genai = genai
 
     def _convert_tools_to_gemini(self, tools: List[Dict]) -> List:
         """Convert Anthropic tool format to Gemini format."""
+        from google.genai import types
+
         function_declarations = []
         for tool in tools:
-            function_declarations.append({
-                "name": tool["name"],
-                "description": tool["description"],
-                "parameters": tool["input_schema"]
-            })
-        return function_declarations
+            # Convert JSON Schema to Gemini Schema format
+            schema = tool["input_schema"]
+            properties = {}
+            for prop_name, prop_def in schema.get("properties", {}).items():
+                prop_type = prop_def.get("type", "string").upper()
+                if prop_type == "STRING":
+                    properties[prop_name] = types.Schema(
+                        type=types.Type.STRING,
+                        description=prop_def.get("description", "")
+                    )
+                elif prop_type == "INTEGER":
+                    properties[prop_name] = types.Schema(
+                        type=types.Type.INTEGER,
+                        description=prop_def.get("description", "")
+                    )
+                elif prop_type == "BOOLEAN":
+                    properties[prop_name] = types.Schema(
+                        type=types.Type.BOOLEAN,
+                        description=prop_def.get("description", "")
+                    )
+
+            func_decl = types.FunctionDeclaration(
+                name=tool["name"],
+                description=tool["description"],
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties=properties,
+                    required=schema.get("required", [])
+                )
+            )
+            function_declarations.append(func_decl)
+
+        return [types.Tool(function_declarations=function_declarations)]
 
     def chat(self, messages: List[Dict], system: str, tools: List[Dict]) -> Dict[str, Any]:
-        from google.generativeai.types import content_types
-        import json
+        from google.genai import types
 
-        # Create model with system instruction
-        model = self.genai.GenerativeModel(
-            model_name=self.model_name,
-            system_instruction=system,
-            tools=self._convert_tools_to_gemini(tools)
-        )
-
-        # Convert messages to Gemini format
-        gemini_history = []
+        # Build contents list
+        contents = []
         for msg in messages:
             if msg["role"] == "user":
                 if isinstance(msg["content"], str):
-                    gemini_history.append({
-                        "role": "user",
-                        "parts": [msg["content"]]
-                    })
+                    contents.append(types.Content(
+                        role="user",
+                        parts=[types.Part(text=msg["content"])]
+                    ))
                 elif isinstance(msg["content"], list):
                     # Tool results
                     parts = []
                     for item in msg["content"]:
                         if item.get("type") == "tool_result":
-                            parts.append(self.genai.protos.Part(
-                                function_response=self.genai.protos.FunctionResponse(
+                            parts.append(types.Part(
+                                function_response=types.FunctionResponse(
                                     name=item.get("tool_name", "unknown"),
                                     response={"result": item["content"]}
                                 )
                             ))
                     if parts:
-                        gemini_history.append({"role": "user", "parts": parts})
+                        contents.append(types.Content(role="user", parts=parts))
             elif msg["role"] == "assistant":
                 if isinstance(msg["content"], list):
                     parts = []
                     for block in msg["content"]:
-                        if hasattr(block, 'text'):
-                            parts.append(block.text)
+                        if hasattr(block, 'text') and block.text:
+                            parts.append(types.Part(text=block.text))
                         elif hasattr(block, 'type') and block.type == "tool_use":
-                            parts.append(self.genai.protos.Part(
-                                function_call=self.genai.protos.FunctionCall(
+                            parts.append(types.Part(
+                                function_call=types.FunctionCall(
                                     name=block.name,
                                     args=block.input
                                 )
                             ))
                     if parts:
-                        gemini_history.append({"role": "model", "parts": parts})
+                        contents.append(types.Content(role="model", parts=parts))
 
-        # Start chat and get response
-        chat = model.start_chat(history=gemini_history[:-1] if gemini_history else [])
-
-        last_msg = gemini_history[-1]["parts"] if gemini_history else ["Hello"]
-        response = chat.send_message(last_msg)
+        # Generate response
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                tools=self._convert_tools_to_gemini(tools),
+                max_output_tokens=4096
+            )
+        )
 
         # Parse response
         content = []
         has_function_calls = False
 
-        for part in response.parts:
-            if hasattr(part, 'text') and part.text:
-                content.append(TextBlock(text=part.text))
-            elif hasattr(part, 'function_call') and part.function_call:
-                has_function_calls = True
-                fc = part.function_call
-                content.append(ToolUseBlock(
-                    id=f"gemini_{fc.name}_{id(fc)}",
-                    name=fc.name,
-                    input=dict(fc.args)
-                ))
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts:
+                if part.text:
+                    content.append(TextBlock(text=part.text))
+                elif part.function_call:
+                    has_function_calls = True
+                    fc = part.function_call
+                    content.append(ToolUseBlock(
+                        id=f"gemini_{fc.name}_{id(fc)}",
+                        name=fc.name,
+                        input=dict(fc.args) if fc.args else {}
+                    ))
 
         stop_reason = "tool_use" if has_function_calls else "end_turn"
 
@@ -288,8 +314,8 @@ def get_provider(provider_name: str, model: Optional[str] = None) -> LLMProvider
     """
     providers = {
         'anthropic': (AnthropicProvider, "claude-sonnet-4-20250514"),
-        'openai': (OpenAIProvider, "gpt-4o"),
-        'gemini': (GeminiProvider, "gemini-2.0-flash"),
+        'openai': (OpenAIProvider, "gpt-4.1"),
+        'gemini': (GeminiProvider, "gemini-2.5-pro"),
     }
 
     if provider_name not in providers:
