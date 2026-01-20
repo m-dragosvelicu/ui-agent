@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fixitmany"
+version = "1.0.0"
+description = "AI agent for web development - fresh design ideas, bug fixes, and component upgrades"
+authors = [{name = "Dragos Velicu"}]
+readme = "README.txt"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.18.0",
+    "openai>=1.0.0",
+    "google-generativeai>=0.5.0",
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.12.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+fixitmany = "agent:main"
+
+[tool.setuptools]
+py-modules = ["agent", "providers", "tools"]

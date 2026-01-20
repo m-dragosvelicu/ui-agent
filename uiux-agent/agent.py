@@ -5,13 +5,19 @@ An AI agent that helps with web development tasks:
 - Fresh design ideas (not the same old shadcn templates)
 - Bug research and solutions
 - Component improvements and modernization
+
+Supports multiple LLM providers: Anthropic (Claude), OpenAI (GPT), Google (Gemini)
 """
 import asyncio
 import argparse
-from anthropic import Anthropic
-from tools import TOOLS, read_file, list_files, write_file, search_web, fetch_url
+from pathlib import Path
+from dotenv import load_dotenv
 
-client = Anthropic()
+# Load environment variables from .env file
+load_dotenv(Path(__file__).parent / ".env")
+
+from tools import TOOLS, read_file, list_files, write_file, search_web, fetch_url
+from providers import get_provider, LLMProvider
 
 SYSTEM_PROMPT = """You are a UI/UX Research Agent specialized in web development.
 
@@ -63,7 +69,12 @@ async def execute_tool(name: str, input_data: dict) -> str:
         return f"Unknown tool: {name}"
 
 
-async def run_agent(user_message: str, project_path: str = ".", verbose: bool = True) -> str:
+async def run_agent(
+    user_message: str,
+    project_path: str = ".",
+    verbose: bool = True,
+    provider: LLMProvider = None
+) -> str:
     """
     Run the agent loop until completion.
 
@@ -71,10 +82,14 @@ async def run_agent(user_message: str, project_path: str = ".", verbose: bool = 
         user_message: The task/question for the agent
         project_path: Path to the project directory
         verbose: Whether to print tool usage details
+        provider: LLM provider instance (defaults to Anthropic)
 
     Returns:
         The agent's final response
     """
+    if provider is None:
+        provider = get_provider('anthropic')
+
     messages = [
         {
             "role": "user",
@@ -86,6 +101,7 @@ async def run_agent(user_message: str, project_path: str = ".", verbose: bool = 
         print(f"\n{'='*60}")
         print(f"UI/UX RESEARCH AGENT")
         print(f"{'='*60}")
+        print(f"Provider: {provider.get_model_name()}")
         print(f"Task: {user_message[:100]}{'...' if len(user_message) > 100 else ''}")
         print(f"Project: {project_path}")
         print(f"{'='*60}\n")
@@ -99,19 +115,17 @@ async def run_agent(user_message: str, project_path: str = ".", verbose: bool = 
         if verbose:
             print(f"[Iteration {iteration}] Thinking...")
 
-        # Call Claude
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
+        # Call LLM via provider
+        response = provider.chat(
+            messages=messages,
             system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            messages=messages
+            tools=TOOLS
         )
 
         # Check if we're done (no more tool calls)
-        if response.stop_reason == "end_turn":
+        if response['stop_reason'] == "end_turn":
             final_text = ""
-            for block in response.content:
+            for block in response['content']:
                 if hasattr(block, "text"):
                     final_text += block.text
 
@@ -123,14 +137,14 @@ async def run_agent(user_message: str, project_path: str = ".", verbose: bool = 
             return final_text
 
         # Process tool calls
-        if response.stop_reason == "tool_use":
+        if response['stop_reason'] == "tool_use":
             # Add assistant's response to messages
-            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "assistant", "content": response['content']})
 
             # Execute each tool call
             tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
+            for block in response['content']:
+                if hasattr(block, 'type') and block.type == "tool_use":
                     if verbose:
                         print(f"  > Tool: {block.name}")
                         # Truncate input display
@@ -148,6 +162,7 @@ async def run_agent(user_message: str, project_path: str = ".", verbose: bool = 
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
+                        "tool_name": block.name,  # Include for Gemini compatibility
                         "content": result
                     })
 
@@ -155,7 +170,7 @@ async def run_agent(user_message: str, project_path: str = ".", verbose: bool = 
             messages.append({"role": "user", "content": tool_results})
         else:
             # Unexpected stop reason
-            return f"Agent stopped unexpectedly: {response.stop_reason}"
+            return f"Agent stopped unexpectedly: {response['stop_reason']}"
 
     return "Agent reached maximum iterations without completing."
 
@@ -180,6 +195,16 @@ def main():
         help="Suppress verbose output"
     )
     parser.add_argument(
+        "--provider",
+        choices=["anthropic", "openai", "gemini"],
+        default="anthropic",
+        help="LLM provider to use (default: anthropic)"
+    )
+    parser.add_argument(
+        "--model",
+        help="Model name override (default: provider's default model)"
+    )
+    parser.add_argument(
         "--interactive",
         action="store_true",
         help="Run in interactive mode"
@@ -187,8 +212,11 @@ def main():
 
     args = parser.parse_args()
 
+    # Initialize provider
+    provider = get_provider(args.provider, args.model)
+
     if args.interactive:
-        print("UI/UX Research Agent - Interactive Mode")
+        print(f"UI/UX Research Agent - Interactive Mode ({provider.get_model_name()})")
         print("Type 'quit' to exit\n")
 
         while True:
@@ -202,7 +230,8 @@ def main():
                 result = asyncio.run(run_agent(
                     task,
                     project_path=args.project,
-                    verbose=not args.quiet
+                    verbose=not args.quiet,
+                    provider=provider
                 ))
                 print(f"\n{result}\n")
             except KeyboardInterrupt:
@@ -221,7 +250,8 @@ def main():
         result = asyncio.run(run_agent(
             task,
             project_path=args.project,
-            verbose=not args.quiet
+            verbose=not args.quiet,
+            provider=provider
         ))
         print(result)
 
